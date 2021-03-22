@@ -58,7 +58,7 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:      "row-filter",
+				Name:      "row",
 				Aliases:   []string{"row"},
 				Usage:     "Generate an output image where each row is the average, min or max value of all the pixels in source row",
 				ArgsUsage: "[mode] (avg|min|max)",
@@ -69,12 +69,12 @@ func main() {
 					} else {
 						mode = "avg"
 					}
-					rowFilter(source, output, mode, shadow, highlight)
+					rowFilter(source, output, rowParams{mode, shadow, highlight})
 					return nil
 				},
 			},
 			{
-				Name:      "checkerbox-filter",
+				Name:      "checkerbox",
 				Aliases:   []string{"checkerbox", "check"},
 				Usage:     "Create a checkboard where each box is the average, min or max of the original pixel values in the box",
 				ArgsUsage: "[mode] (avg|min|max)",
@@ -93,7 +93,7 @@ func main() {
 					} else {
 						mode = "avg"
 					}
-					checkerboxFilter(source, output, mode, checkerBoxSize, shadow, highlight)
+					checkerboxFilter(source, output, checkerBoxParams{mode, checkerBoxSize, shadow, highlight})
 					return nil
 				},
 			},
@@ -108,7 +108,7 @@ func main() {
 }
 
 //
-// common
+// helpers
 //
 
 func findMinValue(values []uint32) uint32 {
@@ -130,6 +130,10 @@ func findMaxValue(values []uint32) uint32 {
 	}
 	return max
 }
+
+//
+// program
+//
 
 func load(srcPath string) (image.Image, int, int) {
 	file, _ := os.Open(srcPath)
@@ -158,7 +162,14 @@ func save(outPath string, outImg image.Image) {
 // filters
 //
 
-func checkerboxFilter(srcPath string, outPath string, mode string, size int, shadowMask int, highlightMask int) {
+type checkerBoxParams struct {
+	mode          string
+	size          int
+	shadowMask    int
+	highlightMask int
+}
+
+func checkerboxFilter(srcPath string, outPath string, params checkerBoxParams) {
 	img, height, width := load(srcPath)
 
 	upLeft := image.Point{0, 0}
@@ -166,8 +177,8 @@ func checkerboxFilter(srcPath string, outPath string, mode string, size int, sha
 
 	outImg := image.NewRGBA(image.Rectangle{upLeft, lowRight})
 
-	numRows := height / size
-	numColumns := width / size
+	numRows := height / params.size
+	numColumns := width / params.size
 
 	for row := 0; row < numRows; row++ {
 
@@ -180,10 +191,10 @@ func checkerboxFilter(srcPath string, outPath string, mode string, size int, sha
 			avgGreen := uint32(0)
 			avgBlue := uint32(0)
 
-			xOffset := col * size
-			xMax := xOffset + size
-			yOffset := row * size
-			yMax := yOffset + size
+			xOffset := col * params.size
+			xMax := xOffset + params.size
+			yOffset := row * params.size
+			yMax := yOffset + params.size
 
 			// loop over pixels to get statistis
 			for x := xOffset; x < xMax; x++ {
@@ -194,7 +205,7 @@ func checkerboxFilter(srcPath string, outPath string, mode string, size int, sha
 					greenValues = append(greenValues, g)
 					blueValues = append(blueValues, b)
 
-					if mode == "avg" {
+					if params.mode == "avg" {
 						avgRed += r
 						avgGreen += g
 						avgBlue += b
@@ -208,19 +219,19 @@ func checkerboxFilter(srcPath string, outPath string, mode string, size int, sha
 			var gValue uint32
 			var bValue uint32
 
-			if mode == "avg" {
+			if params.mode == "avg" {
 				rValue = avgRed / uint32(width)
 				gValue = avgGreen / uint32(width)
 				bValue = avgBlue / uint32(width)
-			} else if mode == "min" {
+			} else if params.mode == "min" {
 				rValue = findMinValue(redValues)
 				gValue = findMinValue(greenValues)
 				bValue = findMinValue(blueValues)
-			} else if mode == "max" {
+			} else if params.mode == "max" {
 				rValue = findMaxValue(redValues)
 				gValue = findMaxValue(greenValues)
 				bValue = findMaxValue(blueValues)
-			} else if mode == "sort" {
+			} else if params.mode == "sort" {
 				sort.Slice(redValues, func(i, j int) bool { return redValues[i] < redValues[j] })
 				sort.Slice(greenValues, func(i, j int) bool { return greenValues[i] < greenValues[j] })
 				sort.Slice(blueValues, func(i, j int) bool { return blueValues[i] < blueValues[j] })
@@ -235,9 +246,9 @@ func checkerboxFilter(srcPath string, outPath string, mode string, size int, sha
 					r, g, b, _ := img.At(x, y).RGBA()
 					lum, _, _ := color.RGBToYCbCr(uint8(r/257), uint8(g/257), uint8(b/257))
 
-					if lum < uint8(shadowMask) || lum > uint8(highlightMask) {
+					if lum < uint8(params.shadowMask) || lum > uint8(params.highlightMask) {
 						outImg.SetRGBA(x, y, color.RGBA{uint8(r / 257), uint8(g / 257), uint8(b / 257), 255})
-					} else if mode == "sort" {
+					} else if params.mode == "sort" {
 						outImg.SetRGBA(x, y, color.RGBA{uint8(redValues[sortOffset] / 257), uint8(greenValues[sortOffset] / 257), uint8(blueValues[sortOffset] / 257), 255})
 						sortOffset++
 					} else {
@@ -253,14 +264,20 @@ func checkerboxFilter(srcPath string, outPath string, mode string, size int, sha
 	if outPath == "" {
 		var extension = filepath.Ext(srcPath)
 		var name = srcPath[0 : len(srcPath)-len(extension)]
-		outPath = fmt.Sprint(name, "-checker-", size, "-", mode, "-high-", highlightMask, "-low-", shadowMask, ".png")
+		outPath = fmt.Sprint(name, "-checker-", params.size, "-", params.mode, "-high-", params.highlightMask, "-low-", params.shadowMask, ".png")
 	}
 
 	save(outPath, outImg)
 
 }
 
-func rowFilter(srcPath string, outPath string, mode string, shadowMask int, highlightMask int) {
+type rowParams struct {
+	mode          string
+	shadowMask    int
+	highlightMask int
+}
+
+func rowFilter(srcPath string, outPath string, params rowParams) {
 	img, height, width := load(srcPath)
 
 	upLeft := image.Point{0, 0}
@@ -284,7 +301,7 @@ func rowFilter(srcPath string, outPath string, mode string, shadowMask int, high
 			greenValues = append(greenValues, g)
 			blueValues = append(blueValues, b)
 
-			if mode == "avg" {
+			if params.mode == "avg" {
 				avgRed += r
 				avgGreen += g
 				avgBlue += b
@@ -296,19 +313,19 @@ func rowFilter(srcPath string, outPath string, mode string, shadowMask int, high
 		var gValue uint32
 		var bValue uint32
 
-		if mode == "avg" {
+		if params.mode == "avg" {
 			rValue = avgRed / uint32(width)
 			gValue = avgGreen / uint32(width)
 			bValue = avgBlue / uint32(width)
-		} else if mode == "min" {
+		} else if params.mode == "min" {
 			rValue = findMinValue(redValues)
 			gValue = findMinValue(greenValues)
 			bValue = findMinValue(blueValues)
-		} else if mode == "max" {
+		} else if params.mode == "max" {
 			rValue = findMaxValue(redValues)
 			gValue = findMaxValue(greenValues)
 			bValue = findMaxValue(blueValues)
-		} else if mode == "sort" {
+		} else if params.mode == "sort" {
 			sort.Slice(redValues, func(i, j int) bool { return redValues[i] < redValues[j] })
 			sort.Slice(greenValues, func(i, j int) bool { return greenValues[i] < greenValues[j] })
 			sort.Slice(blueValues, func(i, j int) bool { return blueValues[i] < blueValues[j] })
@@ -320,9 +337,9 @@ func rowFilter(srcPath string, outPath string, mode string, shadowMask int, high
 			r, g, b, _ := img.At(x, y).RGBA()
 			lum, _, _ := color.RGBToYCbCr(uint8(r/257), uint8(g/257), uint8(b/257))
 
-			if lum < uint8(shadowMask) || lum > uint8(highlightMask) {
+			if lum < uint8(params.shadowMask) || lum > uint8(params.highlightMask) {
 				outImg.SetRGBA(x, y, color.RGBA{uint8(r / 257), uint8(g / 257), uint8(b / 257), 255})
-			} else if mode == "sort" {
+			} else if params.mode == "sort" {
 				outImg.SetRGBA(x, y, color.RGBA{uint8(redValues[x] / 257), uint8(greenValues[x] / 257), uint8(blueValues[x] / 257), 255})
 			} else {
 				outImg.SetRGBA(x, y, color.RGBA{uint8(rValue / 257), uint8(gValue / 257), uint8(bValue / 257), 255})
@@ -334,7 +351,7 @@ func rowFilter(srcPath string, outPath string, mode string, shadowMask int, high
 	if outPath == "" {
 		var extension = filepath.Ext(srcPath)
 		var name = srcPath[0 : len(srcPath)-len(extension)]
-		outPath = fmt.Sprint(name, "-row-", mode, "-high-", highlightMask, "-low-", shadowMask, ".png")
+		outPath = fmt.Sprint(name, "-row-", params.mode, "-high-", params.highlightMask, "-low-", params.shadowMask, ".png")
 	}
 
 	save(outPath, outImg)
