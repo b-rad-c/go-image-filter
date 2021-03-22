@@ -320,7 +320,7 @@ func rowFilter(srcPath string, outPath string, mode string, shadowMask int, high
 			r, g, b, _ := img.At(x, y).RGBA()
 			lum, _, _ := color.RGBToYCbCr(uint8(r/257), uint8(g/257), uint8(b/257))
 
-			if lum < uint8(shadowMask) {
+			if lum < uint8(shadowMask) || lum > uint8(highlightMask) {
 				outImg.SetRGBA(x, y, color.RGBA{uint8(r / 257), uint8(g / 257), uint8(b / 257), 255})
 			} else if mode == "sort" {
 				outImg.SetRGBA(x, y, color.RGBA{uint8(redValues[x] / 257), uint8(greenValues[x] / 257), uint8(blueValues[x] / 257), 255})
