@@ -17,7 +17,7 @@ That's boring, let's add a shadow mask.
 
 Or sort the colors in each row.
 
-![Pixel sort](img/P1490270-row-sort-high-255-low-32.png)
+![Pixel sort](img/P1490270-row-sort-high-255-low-16.png)
 
 ## Checkerbox filter
 ![Checkboxer filter](img/P1490270-checker-77-min-high-255-low-0.png)
